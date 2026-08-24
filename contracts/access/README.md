@@ -53,7 +53,6 @@ Implemented:
 - `has_role`, `get_role_admin`, `assert_has_role`
 - `grant_role[_as]`, `revoke_role[_as]`, `renounce_role[_as]`
 - `set_role_admin[_as]`
-- `transfer_default_admin[_as]`, `renounce_default_admin[_as]`
 - Timelocked root-admin flow: `begin_default_admin_transfer`, `accept_default_admin_transfer`, `begin_default_admin_renounce`, `accept_default_admin_renounce`, `cancel_default_admin_transfer`
 - Delay configuration + getters: `set_default_admin_delay[_as]`, `default_admin_delay_ms`, `pending_default_admin_*`
 - Delayed delay-change flow: `begin_default_admin_delay_change[_as]`, `cancel_default_admin_delay_change[_as]`, `pending_default_admin_delay_change_*`, `default_admin_delay_ms_at`

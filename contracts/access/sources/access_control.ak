@@ -202,13 +202,9 @@ pub fn set_default_admin_delay(
   new_delay_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) -> set_default_admin_delay_as(ac, new_delay_ms, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) -> set_default_admin_delay_as(ac, new_delay_ms, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -259,14 +255,10 @@ pub fn begin_default_admin_delay_change(
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) ->
-        begin_default_admin_delay_change_as(ac, new_delay_ms, now_ms, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) ->
+      begin_default_admin_delay_change_as(ac, new_delay_ms, now_ms, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -302,13 +294,9 @@ pub fn cancel_default_admin_delay_change(
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) -> cancel_default_admin_delay_change_as(ac, now_ms, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) -> cancel_default_admin_delay_change_as(ac, now_ms, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -538,14 +526,9 @@ pub fn begin_default_admin_transfer(
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) ->
-        begin_default_admin_transfer_as(ac, new_admin, now_ms, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) -> begin_default_admin_transfer_as(ac, new_admin, now_ms, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -583,13 +566,9 @@ pub fn begin_default_admin_renounce(
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) -> begin_default_admin_renounce_as(ac, now_ms, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) -> begin_default_admin_renounce_as(ac, now_ms, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -715,102 +694,22 @@ pub fn cancel_default_admin_transfer(
   ac: AccessControl,
   tx: Transaction,
 ) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    when first_signer(tx) is {
-      Some(actor) -> cancel_default_admin_transfer_as(ac, actor)
-      None -> Failure(MissingSigner)
-    }
-  } else {
-    Failure(Unauthorized)
-  }
-}
-
-/// Immediate root transfer helper.
-/// Prefer the begin/accept delayed flow for production behavior parity.
-pub fn transfer_default_admin_as(
-  ac: AccessControl,
-  new_admin: VerificationKeyHash,
-  actor: VerificationKeyHash,
-) -> AccessControlResult {
-  if has_role(ac, ac.root_role, actor) {
-    Success(
-      AccessControl {
-        root_role: ac.root_role,
-        roles: ac.roles,
-        default_admin: Some(new_admin),
-        pending_default_admin: ac.pending_default_admin,
-        pending_default_admin_delay_change: ac.pending_default_admin_delay_change,
-        default_admin_delay_ms: ac.default_admin_delay_ms,
-      },
-    )
-  } else {
-    Failure(Unauthorized)
-  }
-}
-
-pub fn transfer_default_admin(
-  ac: AccessControl,
-  new_admin: VerificationKeyHash,
-  tx: Transaction,
-) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    Success(
-      AccessControl {
-        root_role: ac.root_role,
-        roles: ac.roles,
-        default_admin: Some(new_admin),
-        pending_default_admin: ac.pending_default_admin,
-        pending_default_admin_delay_change: ac.pending_default_admin_delay_change,
-        default_admin_delay_ms: ac.default_admin_delay_ms,
-      },
-    )
-  } else {
-    Failure(Unauthorized)
-  }
-}
-
-pub fn renounce_default_admin_as(
-  ac: AccessControl,
-  actor: VerificationKeyHash,
-) -> AccessControlResult {
-  if has_role(ac, ac.root_role, actor) {
-    Success(
-      AccessControl {
-        root_role: ac.root_role,
-        roles: ac.roles,
-        default_admin: None,
-        pending_default_admin: ac.pending_default_admin,
-        pending_default_admin_delay_change: ac.pending_default_admin_delay_change,
-        default_admin_delay_ms: ac.default_admin_delay_ms,
-      },
-    )
-  } else {
-    Failure(Unauthorized)
-  }
-}
-
-pub fn renounce_default_admin(
-  ac: AccessControl,
-  tx: Transaction,
-) -> AccessControlResult {
-  if signer_has_role(ac, tx, ac.root_role) {
-    Success(
-      AccessControl {
-        root_role: ac.root_role,
-        roles: ac.roles,
-        default_admin: None,
-        pending_default_admin: ac.pending_default_admin,
-        pending_default_admin_delay_change: ac.pending_default_admin_delay_change,
-        default_admin_delay_ms: ac.default_admin_delay_ms,
-      },
-    )
-  } else {
-    Failure(Unauthorized)
+  when role_signer(ac, tx, ac.root_role) is {
+    Some(actor) -> cancel_default_admin_transfer_as(ac, actor)
+    None -> Failure(Unauthorized)
   }
 }
 
 fn signer_has_role(ac: AccessControl, tx: Transaction, role: Role) -> Bool {
   list.any(tx.extra_signatories, fn(signer) { has_role(ac, role, signer) })
+}
+
+fn role_signer(
+  ac: AccessControl,
+  tx: Transaction,
+  role: Role,
+) -> Option<VerificationKeyHash> {
+  first_signer_with_role(ac, tx.extra_signatories, role)
 }
 
 fn only_signer(tx: Transaction) -> Option<VerificationKeyHash> {
@@ -820,9 +719,18 @@ fn only_signer(tx: Transaction) -> Option<VerificationKeyHash> {
   }
 }
 
-fn first_signer(tx: Transaction) -> Option<VerificationKeyHash> {
-  when tx.extra_signatories is {
-    [head, ..] -> Some(head)
+fn first_signer_with_role(
+  ac: AccessControl,
+  signers: List<VerificationKeyHash>,
+  role: Role,
+) -> Option<VerificationKeyHash> {
+  when signers is {
+    [head, ..tail] ->
+      if has_role(ac, role, head) {
+        Some(head)
+      } else {
+        first_signer_with_role(ac, tail, role)
+      }
     [] -> None
   }
 }

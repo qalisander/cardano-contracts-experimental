@@ -126,20 +126,17 @@ test renounce_role_happy_path() {
   !access_control.has_role(ac2, role_writer, alice)
 }
 
-test transfer_default_admin_happy_path() {
+test root_admin_tx_ops_pick_authorized_signer_not_first_signer() {
   let ac = access_control.new(admin)
-  let tx = tx_with_signers([admin])
+  let tx = tx_with_signers([alice, admin])
 
-  expect access_control.Success(next) = access_control.transfer_default_admin(
+  expect access_control.Success(next) = access_control.set_default_admin_delay(
     ac,
-    bob,
+    77,
     tx,
   )
 
-  and {
-    access_control.has_role(next, access_control.default_admin_role, bob)?,
-    !access_control.has_role(next, access_control.default_admin_role, admin),
-  }
+  access_control.default_admin_delay_ms(next) == 77
 }
 
 test begin_and_accept_default_admin_transfer_with_delay() {
