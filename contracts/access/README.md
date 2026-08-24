@@ -21,11 +21,21 @@ From the repository root:
 aiken check
 ```
 
+Run only the access-control test module:
+
+```sh
+aiken check -m "contracts/access/tests/access_control_tests.{..}"
+```
+
 From inside `contracts/access` (or any subdirectory):
 
 ```sh
 cd /Users/qalisander/source/open-zeppelin/cardano-contracts && aiken check
 ```
+
+Note: Aiken discovers sources/tests from standard project roots (`lib/` and
+`validators/`). This repository keeps the OpenZeppelin-style layout under
+`contracts/access/` and mirrors discoverable modules accordingly.
 
 ## Cardano-Specific Adaptation
 
