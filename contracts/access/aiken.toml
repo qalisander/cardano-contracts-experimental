@@ -1,8 +1,8 @@
-name = "openzeppelin/cardano-contracts"
+name = "access-control"
 version = "0.1.0"
 plutusVersion = "v3"
 licences = ["MIT"]
-description = "Role-based access control primitives for Cardano smart contracts in Aiken"
+description = "Access control primitives for Cardano smart contracts in Aiken"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"

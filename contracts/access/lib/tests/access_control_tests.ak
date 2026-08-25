@@ -1,6 +1,6 @@
 use aiken/crypto.{VerificationKeyHash}
 use cardano/transaction
-use contracts/access/sources/access_control
+use sources/access_control
 
 const admin = #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 

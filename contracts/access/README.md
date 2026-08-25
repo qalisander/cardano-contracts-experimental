@@ -9,33 +9,32 @@ This module is a Cardano/Aiken adaptation of OpenZeppelin's Sui `access_control.
 
 ## Layout
 
-- `contracts/access/sources/access_control.ak`: role registry data model + transition functions.
-- `contracts/access/tests/access_control_tests.ak`: baseline behavior tests.
-- `contracts/access/examples/root_admin_gate.ak`: minimal validator example that gates spending to root-admin signers.
+- `lib/sources/access_control.ak`: role registry data model + transition functions.
+- `lib/tests/access_control_tests.ak`: baseline behavior tests.
+- `validators/root_admin_gate.ak`: minimal validator example that gates spending to root-admin signers.
 
 ## Run Tests
 
 From the repository root:
 
 ```sh
-aiken check
+cd contracts/access && aiken check
 ```
 
 Run only the access-control test module:
 
 ```sh
-aiken check -m "contracts/access/tests/access_control_tests.{..}"
+cd contracts/access && aiken check -m "tests/access_control_tests.{..}"
 ```
 
 From inside `contracts/access` (or any subdirectory):
 
 ```sh
-cd /Users/qalisander/source/open-zeppelin/cardano-contracts && aiken check
+cd ./contracts/access && aiken check
 ```
 
-Note: Aiken discovers sources/tests from standard project roots (`lib/` and
-`validators/`). This repository keeps the OpenZeppelin-style layout under
-`contracts/access/` and mirrors discoverable modules accordingly.
+This folder is now a standalone Aiken package, so sources are discovered from
+its local `lib/` and `validators/` directories.
 
 ## Cardano-Specific Adaptation
 

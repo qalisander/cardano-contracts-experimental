@@ -1,5 +1,5 @@
 use cardano/transaction.{Transaction}
-use contracts/access/sources/access_control
+use sources/access_control
 
 pub type AccessControlled {
   AccessControlled { ac: access_control.AccessControl }
