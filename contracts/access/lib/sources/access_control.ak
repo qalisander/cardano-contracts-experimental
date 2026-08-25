@@ -107,6 +107,7 @@ pub type AccessControlResult {
 }
 
 /// Create a registry with DEFAULT_ADMIN_ROLE as root role.
+///
 /// Parameters:
 /// - `initial_admin`: account that receives the root role.
 /// Returns:
@@ -118,6 +119,7 @@ pub fn new(initial_admin: VerificationKeyHash) -> AccessControl {
 }
 
 /// Create a registry with a custom root role identifier.
+///
 /// Parameters:
 /// - `root_role`: custom identifier to treat as root role.
 /// - `initial_admin`: account that receives the root role.
@@ -140,6 +142,7 @@ pub fn new_with_root(
 }
 
 /// Return the root role identifier guarded by this registry.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -151,6 +154,7 @@ pub fn protected_root(ac: AccessControl) -> Role {
 }
 
 /// Return the current default admin, if one exists.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -162,6 +166,7 @@ pub fn default_admin(ac: AccessControl) -> Option<VerificationKeyHash> {
 }
 
 /// Return the maximum allowed root-admin delay in milliseconds.
+///
 /// Parameters:
 /// - None.
 /// Returns:
@@ -173,6 +178,7 @@ pub fn max_default_admin_delay_ms() -> Int {
 }
 
 /// Return the maximum wait applied to delay increases.
+///
 /// Parameters:
 /// - None.
 /// Returns:
@@ -184,6 +190,7 @@ pub fn max_delay_increase_wait_ms() -> Int {
 }
 
 /// Return the currently stored root-admin delay in milliseconds.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -195,6 +202,7 @@ pub fn default_admin_delay_ms(ac: AccessControl) -> Int {
 }
 
 /// Return the effective root-admin delay at a given timestamp.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -207,6 +215,7 @@ pub fn default_admin_delay_ms_at(ac: AccessControl, now_ms: Int) -> Int {
 }
 
 /// Return true when any pending root transfer or renounce exists.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -218,6 +227,7 @@ pub fn has_pending_default_admin_transfer(ac: AccessControl) -> Bool {
 }
 
 /// Return true only when the pending root action is a renounce.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -232,6 +242,7 @@ pub fn is_pending_default_admin_renounce(ac: AccessControl) -> Bool {
 }
 
 /// Return the pending root transfer target, if one exists.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -248,6 +259,7 @@ pub fn pending_default_admin_new_admin(
 }
 
 /// Return when the pending root action becomes executable.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// Returns:
@@ -262,6 +274,7 @@ pub fn pending_default_admin_execute_after_ms(ac: AccessControl) -> Option<Int> 
 }
 
 /// Return true when an active pending delay change exists.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -277,6 +290,7 @@ pub fn has_pending_default_admin_delay_change(
 }
 
 /// Return the proposed new delay for an active pending change.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -300,6 +314,7 @@ pub fn pending_default_admin_delay_change_new_delay_ms(
 }
 
 /// Return when the active pending delay change takes effect.
+///
 /// Parameters:
 /// - `ac`: registry to inspect.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -323,6 +338,7 @@ pub fn pending_default_admin_delay_change_schedule_after_ms(
 }
 
 /// Set the root-admin delay immediately, using an explicit actor account.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_delay_ms`: new root-admin delay in milliseconds.
@@ -359,6 +375,7 @@ pub fn set_default_admin_delay_as(
 }
 
 /// Set the root-admin delay immediately, deriving actor from transaction signers.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_delay_ms`: new root-admin delay in milliseconds.
@@ -381,6 +398,7 @@ pub fn set_default_admin_delay(
 }
 
 /// Schedule a delayed change to default_admin_delay_ms using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_delay_ms`: proposed new root-admin delay.
@@ -432,6 +450,7 @@ pub fn begin_default_admin_delay_change_as(
 }
 
 /// Schedule a delayed change to default_admin_delay_ms using transaction signers.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_delay_ms`: proposed new root-admin delay.
@@ -457,6 +476,7 @@ pub fn begin_default_admin_delay_change(
 }
 
 /// Cancel an active pending delay change using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -493,6 +513,7 @@ pub fn cancel_default_admin_delay_change_as(
 }
 
 /// Cancel an active pending delay change using transaction signers.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -515,6 +536,7 @@ pub fn cancel_default_admin_delay_change(
 }
 
 /// Return true when account currently holds role.
+///
 /// Parameters:
 /// - `ac`: registry to query.
 /// - `role`: role identifier to check.
@@ -539,6 +561,7 @@ pub fn has_role(
 }
 
 /// Return the role that administers role.
+///
 /// Parameters:
 /// - `ac`: registry to query.
 /// - `role`: role identifier to inspect.
@@ -558,6 +581,7 @@ pub fn get_role_admin(ac: AccessControl, role: Role) -> Role {
 }
 
 /// Convenience predicate for role-gated call sites and validators.
+///
 /// Parameters:
 /// - `ac`: registry to query.
 /// - `role`: role identifier to check.
@@ -575,6 +599,7 @@ pub fn assert_has_role(
 }
 
 /// Return true when at least one transaction signer currently holds role.
+///
 /// Parameters:
 /// - `ac`: registry to query.
 /// - `tx`: transaction whose signers are checked.
@@ -588,6 +613,7 @@ pub fn tx_has_role(ac: AccessControl, tx: Transaction, role: Role) -> Bool {
 }
 
 /// Grant role using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to grant.
@@ -618,6 +644,7 @@ pub fn grant_role_as(
 }
 
 /// Grant role when any signer holds the role admin.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to grant.
@@ -648,6 +675,7 @@ pub fn grant_role(
 }
 
 /// Revoke role using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to revoke.
@@ -678,6 +706,7 @@ pub fn revoke_role_as(
 }
 
 /// Revoke role when any signer holds the role admin.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to revoke.
@@ -708,6 +737,7 @@ pub fn revoke_role(
 }
 
 /// Renounce role for an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to renounce.
@@ -730,6 +760,7 @@ pub fn renounce_role_as(
 }
 
 /// Renounce role with a single-signer transaction.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to renounce.
@@ -756,6 +787,7 @@ pub fn renounce_role(
 }
 
 /// Set role admin using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role whose admin is being changed.
@@ -786,6 +818,7 @@ pub fn set_role_admin_as(
 }
 
 /// Set role admin when any signer holds the current role admin.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role whose admin is being changed.
@@ -816,6 +849,7 @@ pub fn set_role_admin(
 }
 
 /// Schedule a root role transfer to new_admin using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_admin`: proposed new root admin account.
@@ -860,6 +894,7 @@ pub fn begin_default_admin_transfer_as(
 }
 
 /// Schedule a root role transfer when a root signer is present in the transaction.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `new_admin`: proposed new root admin account.
@@ -884,6 +919,7 @@ pub fn begin_default_admin_transfer(
 }
 
 /// Schedule a root role renounce using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -921,6 +957,7 @@ pub fn begin_default_admin_renounce_as(
 }
 
 /// Schedule a root role renounce when a root signer is present in the transaction.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -942,6 +979,7 @@ pub fn begin_default_admin_renounce(
 }
 
 /// Accept a pending root role transfer using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -988,6 +1026,7 @@ pub fn accept_default_admin_transfer_as(
 }
 
 /// Accept a pending root role transfer with a single-signer transaction.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -1010,6 +1049,7 @@ pub fn accept_default_admin_transfer(
 }
 
 /// Accept a pending root role renounce using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -1056,6 +1096,7 @@ pub fn accept_default_admin_renounce_as(
 }
 
 /// Accept a pending root role renounce with a single-signer transaction.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
@@ -1078,6 +1119,7 @@ pub fn accept_default_admin_renounce(
 }
 
 /// Cancel a pending root transfer or renounce using an explicit actor.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `actor`: account attempting cancellation.
@@ -1112,6 +1154,7 @@ pub fn cancel_default_admin_transfer_as(
 }
 
 /// Cancel a pending root transfer or renounce when a root signer is present.
+///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `tx`: transaction whose signers authorize cancellation.
