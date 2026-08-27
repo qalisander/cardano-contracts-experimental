@@ -22,6 +22,7 @@ aiken --version
 
 - `contracts/`: package catalog (one package per standard/module)
 - `contracts/access/`: standalone Access Control package
+- `contracts/finance/`: standalone Finance package (time-linear + stepped-linear vesting wallets)
 
 Each package has its own:
 
@@ -37,6 +38,12 @@ Run checks for the Access Control package:
 cd contracts/access && aiken check
 ```
 
+Run checks for the Finance package:
+
+```sh
+cd contracts/finance && aiken check
+```
+
 Run a specific test module in Access Control:
 
 ```sh
@@ -50,6 +57,7 @@ Documentation is available in package READMEs and inline module comments.
 Current package documentation:
 
 - `contracts/access/README.md`
+- `contracts/finance/README.md`
 
 ## Notes
 
