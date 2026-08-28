@@ -1,3 +1,8 @@
+use aiken/collection/dict.{Dict}
+use aiken/collection/list
+use aiken/crypto.{VerificationKeyHash}
+use cardano/transaction.{Transaction}
+
 /// Role-based access control primitives for Cardano contracts in Aiken.
 ///
 /// This module adapts OpenZeppelin-style AccessControl semantics to the eUTxO
@@ -8,11 +13,8 @@
 /// 1. Root role membership is stored only in `default_admin`.
 /// 2. Non-root roles are stored in `roles` and are root-administered by default.
 /// 3. Root role transfer and renounce are timelocked through pending actions.
-use aiken/collection/dict.{Dict}
-use aiken/collection/list
-use aiken/crypto.{VerificationKeyHash}
-use cardano/transaction.{Transaction}
-
+/// 4. `DEFAULT_ADMIN_ROLE` is reserved: it can never be held as a non-root role,
+///    even when the registry uses a custom root role.
 /// Role identifier.
 pub type Role =
   ByteArray
@@ -78,7 +80,8 @@ pub type PendingDelayChange {
 pub type AccessControlError {
   /// Caller or signer set does not satisfy authorization requirements.
   Unauthorized
-  /// Root role cannot be managed with generic role operations.
+  /// Role is reserved and cannot be managed with generic role operations:
+  /// either the registry's root role, or the `DEFAULT_ADMIN_ROLE` identifier.
   CannotManageRootRole
   /// Operation expected a signer, but none matched the constraints.
   MissingSigner
@@ -623,7 +626,8 @@ pub fn tx_has_role(ac: AccessControl, tx: Transaction, role: Role) -> Bool {
 /// - `Success(updated)` when grant is authorized.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when actor lacks role admin rights.
 pub fn grant_role_as(
   ac: AccessControl,
@@ -631,7 +635,7 @@ pub fn grant_role_as(
   account: VerificationKeyHash,
   actor: VerificationKeyHash,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let admin_role = get_role_admin(ac, role)
@@ -654,7 +658,8 @@ pub fn grant_role_as(
 /// - `Success(updated)` when an authorized role-admin signer is present.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when no signer has role admin rights.
 pub fn grant_role(
   ac: AccessControl,
@@ -662,7 +667,7 @@ pub fn grant_role(
   account: VerificationKeyHash,
   tx: Transaction,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let admin_role = get_role_admin(ac, role)
@@ -685,7 +690,8 @@ pub fn grant_role(
 /// - `Success(updated)` when revoke is authorized.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when actor lacks role admin rights.
 pub fn revoke_role_as(
   ac: AccessControl,
@@ -693,7 +699,7 @@ pub fn revoke_role_as(
   account: VerificationKeyHash,
   actor: VerificationKeyHash,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let admin_role = get_role_admin(ac, role)
@@ -716,7 +722,8 @@ pub fn revoke_role_as(
 /// - `Success(updated)` when an authorized role-admin signer is present.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when no signer has role admin rights.
 pub fn revoke_role(
   ac: AccessControl,
@@ -724,7 +731,7 @@ pub fn revoke_role(
   account: VerificationKeyHash,
   tx: Transaction,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let admin_role = get_role_admin(ac, role)
@@ -746,13 +753,14 @@ pub fn revoke_role(
 /// - `Success(updated)` when role is non-root.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to renounce root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 pub fn renounce_role_as(
   ac: AccessControl,
   role: Role,
   actor: VerificationKeyHash,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     Success(revoke_role_unchecked(ac, role, actor))
@@ -769,14 +777,15 @@ pub fn renounce_role_as(
 /// - `Success(updated)` when exactly one signer renounces a non-root role.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to renounce root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `MissingSigner` when signer count is not exactly one.
 pub fn renounce_role(
   ac: AccessControl,
   role: Role,
   tx: Transaction,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     when only_signer(tx) is {
@@ -797,7 +806,8 @@ pub fn renounce_role(
 /// - `Success(updated)` when update is authorized.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when actor lacks current admin rights.
 pub fn set_role_admin_as(
   ac: AccessControl,
@@ -805,7 +815,7 @@ pub fn set_role_admin_as(
   new_admin_role: Role,
   actor: VerificationKeyHash,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let previous_admin_role = get_role_admin(ac, role)
@@ -828,7 +838,8 @@ pub fn set_role_admin_as(
 /// - `Success(updated)` when an authorized current-admin signer is present.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `CannotManageRootRole` when attempting to manage root role generically.
+/// - `CannotManageRootRole` when `role` is the registry's root role, or the
+///   reserved `DEFAULT_ADMIN_ROLE` identifier.
 /// - `Unauthorized` when no signer has current admin rights.
 pub fn set_role_admin(
   ac: AccessControl,
@@ -836,7 +847,7 @@ pub fn set_role_admin(
   new_admin_role: Role,
   tx: Transaction,
 ) -> AccessControlResult {
-  if role == ac.root_role {
+  if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
     let previous_admin_role = get_role_admin(ac, role)
@@ -1211,6 +1222,18 @@ fn first_signer_with_role(
       }
     [] -> None
   }
+}
+
+/// Returns true when `role` may not be managed through generic role operations.
+///
+/// Two identifiers are reserved. The registry's own `root_role`, because root
+/// membership lives solely in `default_admin` (invariant 1). And the
+/// `default_admin_role` literal, unconditionally — otherwise a registry built with
+/// `new_with_root` could grant `DEFAULT_ADMIN_ROLE` as an ordinary role, and any
+/// validator that checks that identifier rather than `protected_root` would honour
+/// its members as root admins.
+fn is_reserved_role(ac: AccessControl, role: Role) -> Bool {
+  role == ac.root_role || role == default_admin_role
 }
 
 /// Returns current role data or a root-administered empty default entry.

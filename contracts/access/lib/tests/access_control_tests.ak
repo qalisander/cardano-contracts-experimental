@@ -397,3 +397,75 @@ test pending_default_admin_delay_change_getters_hide_elapsed_state() {
     access_control.default_admin_delay_ms_at(ac2, 30) == 10,
   }
 }
+
+// H-01b: `DEFAULT_ADMIN_ROLE` is reserved even when the registry uses a custom
+// root role, so no shadow admin role can be created for a validator to honour.
+const custom_root = "ROOT_ROLE"
+
+test default_admin_role_cannot_be_granted_under_a_custom_root() {
+  let ac = access_control.new_with_root(custom_root, admin)
+
+  and {
+    access_control.grant_role_as(
+      ac,
+      access_control.default_admin_role,
+      alice,
+      admin,
+    ) == access_control.Failure(access_control.CannotManageRootRole),
+    access_control.grant_role(
+      ac,
+      access_control.default_admin_role,
+      alice,
+      tx_with_signers([admin]),
+    ) == access_control.Failure(access_control.CannotManageRootRole),
+  }
+}
+
+test default_admin_role_is_reserved_across_every_management_op() {
+  let ac = access_control.new_with_root(custom_root, admin)
+  let reserved = access_control.default_admin_role
+  let expected = access_control.Failure(access_control.CannotManageRootRole)
+
+  and {
+    access_control.revoke_role_as(ac, reserved, alice, admin) == expected,
+    access_control.revoke_role(ac, reserved, alice, tx_with_signers([admin])) == expected,
+    access_control.renounce_role_as(ac, reserved, alice) == expected,
+    access_control.renounce_role(ac, reserved, tx_with_signers([alice])) == expected,
+    access_control.set_role_admin_as(ac, reserved, custom_root, admin) == expected,
+    access_control.set_role_admin(
+      ac,
+      reserved,
+      custom_root,
+      tx_with_signers([admin]),
+    ) == expected,
+  }
+}
+
+test custom_root_role_is_still_reserved() {
+  let ac = access_control.new_with_root(custom_root, admin)
+
+  access_control.grant_role_as(ac, custom_root, alice, admin) == access_control.Failure(
+    access_control.CannotManageRootRole,
+  )
+}
+
+test reserving_default_admin_role_does_not_affect_ordinary_roles() {
+  let ac = access_control.new_with_root(custom_root, admin)
+
+  expect access_control.Success(granted) = access_control.grant_role_as(
+    ac,
+    role_writer,
+    alice,
+    admin,
+  )
+
+  and {
+    access_control.has_role(granted, role_writer, alice),
+    // the root holder is unchanged and still resolves through `protected_root`
+    access_control.has_role(
+      granted,
+      access_control.protected_root(granted),
+      admin,
+    ),
+  }
+}
