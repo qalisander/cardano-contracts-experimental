@@ -755,7 +755,12 @@ pub fn revoke_role(
 /// Errors:
 /// - `CannotManageRootRole` when `role` is the registry's root role, or the
 ///   reserved `DEFAULT_ADMIN_ROLE` identifier.
-pub fn renounce_role_as(
+///
+/// > [!WARNING]
+/// > Performs NO authorization: `actor` is revoked unconditionally. Private on
+/// > purpose — every caller must first prove `actor` authorised the transaction.
+/// > Use `renounce_role`, which checks `tx.extra_signatories`.
+fn renounce_role_unchecked(
   ac: AccessControl,
   role: Role,
   actor: VerificationKeyHash,
@@ -767,31 +772,36 @@ pub fn renounce_role_as(
   }
 }
 
-/// Renounce role with a single-signer transaction.
+/// Renounce `role` for `account`, which must have signed the transaction.
 ///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `role`: role to renounce.
-/// - `tx`: transaction expected to contain exactly one signer.
+/// - `account`: account renouncing its own membership.
+/// - `tx`: transaction whose signatories must include `account`.
 /// Returns:
-/// - `Success(updated)` when exactly one signer renounces a non-root role.
+/// - `Success(updated)` when `account` signed and `role` is not reserved.
 /// - `Failure(error)` otherwise.
 /// Errors:
 /// - `CannotManageRootRole` when `role` is the registry's root role, or the
 ///   reserved `DEFAULT_ADMIN_ROLE` identifier.
-/// - `MissingSigner` when signer count is not exactly one.
+/// - `MissingSigner` when `account` is absent from `tx.extra_signatories`.
+///
+/// Additional signatories are permitted and ignored: a script cannot observe who
+/// "sent" a transaction, only who signed it, so renouncing is authorised by
+/// `account`'s presence in the signatory set rather than by its being alone there.
 pub fn renounce_role(
   ac: AccessControl,
   role: Role,
+  account: VerificationKeyHash,
   tx: Transaction,
 ) -> AccessControlResult {
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
+  } else if !list.has(tx.extra_signatories, account) {
+    Failure(MissingSigner)
   } else {
-    when only_signer(tx) is {
-      Some(actor) -> Success(revoke_role_unchecked(ac, role, actor))
-      None -> Failure(MissingSigner)
-    }
+    renounce_role_unchecked(ac, role, account)
   }
 }
 
@@ -1036,26 +1046,41 @@ pub fn accept_default_admin_transfer_as(
   }
 }
 
-/// Accept a pending root role transfer with a single-signer transaction.
+/// Accept a pending root role transfer, signed by the pending new admin.
 ///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
-/// - `tx`: transaction expected to contain exactly one signer.
+/// - `tx`: transaction whose signatories must include the pending new admin.
 /// Returns:
 /// - `Success(updated)` when transfer can be accepted.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `MissingSigner` when signer count is not exactly one.
+/// - `NoPendingAdminTransfer` when no pending action exists.
+/// - `NotPendingTransfer` when the pending action is a renounce.
+/// - `MissingSigner` when the pending new admin did not sign.
 /// - Root transfer acceptance errors propagated from `accept_default_admin_transfer_as`.
+///
+/// Additional signatories are permitted and ignored. The transaction spending the
+/// registry will normally also carry the outgoing admin's signature, so requiring
+/// the acceptor to be the *only* signatory would make acceptance unsatisfiable.
 pub fn accept_default_admin_transfer(
   ac: AccessControl,
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  when only_signer(tx) is {
-    Some(actor) -> accept_default_admin_transfer_as(ac, now_ms, actor)
-    None -> Failure(MissingSigner)
+  when ac.pending_default_admin is {
+    None -> Failure(NoPendingAdminTransfer)
+    Some(pending) ->
+      when pending.new_admin is {
+        None -> Failure(NotPendingTransfer)
+        Some(new_admin) ->
+          if !list.has(tx.extra_signatories, new_admin) {
+            Failure(MissingSigner)
+          } else {
+            accept_default_admin_transfer_as(ac, now_ms, new_admin)
+          }
+      }
   }
 }
 
@@ -1106,26 +1131,33 @@ pub fn accept_default_admin_renounce_as(
   }
 }
 
-/// Accept a pending root role renounce with a single-signer transaction.
+/// Accept a pending root role renounce, signed by the current root holder.
 ///
 /// Parameters:
 /// - `ac`: registry state to update.
 /// - `now_ms`: current timestamp in milliseconds.
-/// - `tx`: transaction expected to contain exactly one signer.
+/// - `tx`: transaction whose signatories must include the current root holder.
 /// Returns:
 /// - `Success(updated)` when renounce can be accepted.
 /// - `Failure(error)` otherwise.
 /// Errors:
-/// - `MissingSigner` when signer count is not exactly one.
+/// - `Unauthorized` when no signatory holds the root role.
 /// - Root renounce acceptance errors propagated from `accept_default_admin_renounce_as`.
+///
+/// Additional signatories are permitted and ignored.
+///
+/// > [!WARNING]
+/// > On success `default_admin` becomes `None`, and `has_role` for the root role is
+/// > then false for every account. Any validator whose only authorization path is
+/// > the root role will reject every subsequent spend, locking the value it guards.
 pub fn accept_default_admin_renounce(
   ac: AccessControl,
   now_ms: Int,
   tx: Transaction,
 ) -> AccessControlResult {
-  when only_signer(tx) is {
+  when role_signer(ac, tx, ac.root_role) is {
     Some(actor) -> accept_default_admin_renounce_as(ac, now_ms, actor)
-    None -> Failure(MissingSigner)
+    None -> Failure(Unauthorized)
   }
 }
 
@@ -1197,14 +1229,6 @@ fn role_signer(
   role: Role,
 ) -> Option<VerificationKeyHash> {
   first_signer_with_role(ac, tx.extra_signatories, role)
-}
-
-/// Returns the signer only when the transaction contains exactly one signer.
-fn only_signer(tx: Transaction) -> Option<VerificationKeyHash> {
-  when tx.extra_signatories is {
-    [signer] -> Some(signer)
-    _ -> None
-  }
 }
 
 /// Recursively scans signer list and returns the first signer holding `role`.

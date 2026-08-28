@@ -87,7 +87,9 @@ test set_role_admin_transfers_grant_authority() {
   }
 }
 
-test renounce_role_requires_single_signer() {
+// M-02: renouncing is authorized by `account` being among the signatories, not by
+// its being the only one.
+test renounce_role_requires_the_account_to_sign() {
   let ac0 = access_control.new(admin)
   let tx_admin = tx_with_signers([admin])
 
@@ -98,11 +100,31 @@ test renounce_role_requires_single_signer() {
     tx_admin,
   )
 
-  let tx_multi = tx_with_signers([alice, bob])
-
-  access_control.renounce_role(ac1, role_writer, tx_multi) == access_control.Failure(
+  // bob signs; alice does not. Alice's role must survive.
+  access_control.renounce_role(ac1, role_writer, alice, tx_with_signers([bob])) == access_control.Failure(
     access_control.MissingSigner,
   )
+}
+
+test renounce_role_allows_extra_signatories() {
+  let ac0 = access_control.new(admin)
+  let tx_admin = tx_with_signers([admin])
+
+  expect access_control.Success(ac1) = access_control.grant_role(
+    ac0,
+    role_writer,
+    alice,
+    tx_admin,
+  )
+
+  expect access_control.Success(ac2) = access_control.renounce_role(
+    ac1,
+    role_writer,
+    alice,
+    tx_with_signers([admin, alice, bob]),
+  )
+
+  !access_control.has_role(ac2, role_writer, alice)
 }
 
 test renounce_role_happy_path() {
@@ -120,6 +142,7 @@ test renounce_role_happy_path() {
   expect access_control.Success(ac2) = access_control.renounce_role(
     ac1,
     role_writer,
+    alice,
     tx_alice,
   )
 
@@ -429,8 +452,7 @@ test default_admin_role_is_reserved_across_every_management_op() {
   and {
     access_control.revoke_role_as(ac, reserved, alice, admin) == expected,
     access_control.revoke_role(ac, reserved, alice, tx_with_signers([admin])) == expected,
-    access_control.renounce_role_as(ac, reserved, alice) == expected,
-    access_control.renounce_role(ac, reserved, tx_with_signers([alice])) == expected,
+    access_control.renounce_role(ac, reserved, alice, tx_with_signers([alice])) == expected,
     access_control.set_role_admin_as(ac, reserved, custom_root, admin) == expected,
     access_control.set_role_admin(
       ac,
@@ -468,4 +490,93 @@ test reserving_default_admin_role_does_not_affect_ordinary_roles() {
       admin,
     ),
   }
+}
+
+// H-04: a transaction spending a root-gated registry necessarily carries the
+// OUTGOING admin's signature too, so acceptance must tolerate extra signatories
+// rather than demanding the acceptor be alone in the set.
+fn pending_transfer_to_bob() -> access_control.AccessControl {
+  let ac0 = access_control.new(admin)
+  expect access_control.Success(ac1) = access_control.set_default_admin_delay_as(
+    ac0,
+    100,
+    admin,
+  )
+  expect access_control.Success(ac2) = access_control.begin_default_admin_transfer(
+    ac1,
+    bob,
+    0,
+    tx_with_signers([admin]),
+  )
+  ac2
+}
+
+fn pending_renounce() -> access_control.AccessControl {
+  let ac0 = access_control.new(admin)
+  expect access_control.Success(ac1) = access_control.set_default_admin_delay_as(
+    ac0,
+    50,
+    admin,
+  )
+  expect access_control.Success(ac2) = access_control.begin_default_admin_renounce(
+    ac1,
+    0,
+    tx_with_signers([admin]),
+  )
+  ac2
+}
+
+test accept_transfer_tolerates_the_outgoing_admin_signature() {
+  expect access_control.Success(ac3) = access_control.accept_default_admin_transfer(
+    pending_transfer_to_bob(),
+    100,
+    tx_with_signers([admin, bob]),
+  )
+
+  and {
+    access_control.default_admin(ac3) == Some(bob),
+    !access_control.has_pending_default_admin_transfer(ac3),
+  }
+}
+
+test accept_transfer_requires_the_pending_admin_to_sign() {
+  access_control.accept_default_admin_transfer(
+    pending_transfer_to_bob(),
+    100,
+    tx_with_signers([admin, carol]),
+  ) == access_control.Failure(access_control.MissingSigner)
+}
+
+test accept_transfer_rejects_when_nothing_is_pending() {
+  access_control.accept_default_admin_transfer(
+    access_control.new(admin),
+    100,
+    tx_with_signers([bob]),
+  ) == access_control.Failure(access_control.NoPendingAdminTransfer)
+}
+
+test accept_transfer_rejects_a_pending_renounce() {
+  access_control.accept_default_admin_transfer(
+    pending_renounce(),
+    50,
+    tx_with_signers([admin]),
+  ) == access_control.Failure(access_control.NotPendingTransfer)
+}
+
+test accept_renounce_tolerates_extra_signatories() {
+  expect access_control.Success(ac3) = access_control.accept_default_admin_renounce(
+    pending_renounce(),
+    50,
+    tx_with_signers([admin, bob]),
+  )
+
+  access_control.default_admin(ac3) == None
+}
+
+test accept_renounce_requires_a_root_signer() {
+  access_control.accept_default_admin_renounce(
+    pending_renounce(),
+    50,
+    tx_with_signers([bob, carol]),
+  ) == access_control.Failure(access_control.Unauthorized)
 }
