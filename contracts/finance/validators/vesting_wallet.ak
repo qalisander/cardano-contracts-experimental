@@ -4,7 +4,9 @@ use cardano/assets
 use cardano/transaction.{
   InlineDatum, Input, NoDatum, Output, OutputReference, Transaction,
 }
-use sources/vesting/types.{ReclaimInvalid, Release, VestingDatum, VestingRedeemer}
+use sources/vesting/types.{
+  ReclaimInvalid, Release, VestingDatum, VestingRedeemer,
+}
 use sources/vesting/wallet
 
 /// A linear vesting wallet validator.
@@ -42,6 +44,8 @@ fn schedule() -> VestingDatum {
     cliff: 0,
     duration: 100,
     released: 0,
+    asset: None,
+    released_units: 0,
   }
 }
 

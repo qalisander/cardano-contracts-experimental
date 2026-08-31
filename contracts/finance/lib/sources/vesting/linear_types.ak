@@ -1,5 +1,5 @@
 use aiken/crypto.{VerificationKeyHash}
-use cardano/assets.{Lovelace}
+use cardano/assets.{AssetName, Lovelace, PolicyId}
 
 /// Datum and redeemer types for stepped linear vesting.
 pub type PosixTime =
@@ -22,6 +22,11 @@ pub type LinearVestingDatum {
   steps: Int,
   /// Lovelace cumulatively released from this wallet.
   released: Lovelace,
+  /// The single native asset vested alongside lovelace, if any. A wallet may hold
+  /// lovelace and this asset and nothing else.
+  asset: Option<(PolicyId, AssetName)>,
+  /// Units of `asset` cumulatively released from this wallet.
+  released_units: Int,
 }
 
 /// Actions supported by the linear vesting wallet.

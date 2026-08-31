@@ -21,6 +21,12 @@ pub fn is_valid(self: VestingDatum) -> Bool {
     self.cliff >= 0,
     self.cliff <= self.duration,
     self.released >= 0,
+    self.released_units >= 0,
+    // No unit accounting without an asset to account for.
+    or {
+      self.asset != None,
+      self.released_units == 0,
+    },
   }
 }
 
@@ -35,14 +41,36 @@ pub fn vested(self: VestingDatum, total: Lovelace, now: PosixTime) -> Lovelace {
   }
 }
 
-/// Newly releasable amount at `now`, clamped to available locked lovelace.
+/// Newly releasable amount at `now`, clamped to what is still locked.
+///
+/// Shared by the lovelace and unit ledgers: both vest on the same schedule and
+/// differ only in which balance and which counter they read.
+pub fn releasable_from(
+  self: VestingDatum,
+  locked: Int,
+  released: Int,
+  now: PosixTime,
+) -> Int {
+  let total = locked + released
+  math.clamp(vested(self, total, now) - released, min: 0, max: locked)
+}
+
+/// Newly releasable lovelace at `now`.
 pub fn releasable(
   self: VestingDatum,
   locked: Lovelace,
   now: PosixTime,
 ) -> Lovelace {
-  let total = locked + self.released
-  math.clamp(vested(self, total, now) - self.released, min: 0, max: locked)
+  releasable_from(self, locked, self.released, now)
+}
+
+/// Newly releasable units of the vested asset at `now`.
+pub fn releasable_units(
+  self: VestingDatum,
+  locked_units: Int,
+  now: PosixTime,
+) -> Int {
+  releasable_from(self, locked_units, self.released_units, now)
 }
 
 /// Conservative "now" extracted from the tx validity lower bound.

@@ -5,7 +5,7 @@ use cardano/transaction.{
   InlineDatum, Input, NoDatum, Output, OutputReference, Transaction,
 }
 use sources/vesting/linear_types.{
-  ReclaimInvalid, Release, LinearVestingDatum, LinearVestingRedeemer,
+  LinearVestingDatum, LinearVestingRedeemer, ReclaimInvalid, Release,
 }
 use sources/vesting/linear_wallet
 
@@ -44,6 +44,8 @@ fn schedule() -> LinearVestingDatum {
     period: 10,
     steps: 10,
     released: 0,
+    asset: None,
+    released_units: 0,
   }
 }
 

@@ -1,5 +1,5 @@
 use aiken/crypto.{VerificationKeyHash}
-use cardano/assets.{Lovelace}
+use cardano/assets.{AssetName, Lovelace, PolicyId}
 
 /// Datum and redeemer types for the vesting wallet.
 /// POSIX time in milliseconds since epoch.
@@ -21,6 +21,11 @@ pub type VestingDatum {
   duration: Int,
   /// Lovelace cumulatively released from this wallet.
   released: Lovelace,
+  /// The single native asset vested alongside lovelace, if any. A wallet may hold
+  /// lovelace and this asset and nothing else.
+  asset: Option<(PolicyId, AssetName)>,
+  /// Units of `asset` cumulatively released from this wallet.
+  released_units: Int,
 }
 
 /// Actions supported by the vesting wallet.

@@ -40,6 +40,8 @@ fn stepped() -> LinearVestingDatum {
     period: 10,
     steps: 8,
     released: 0,
+    asset: None,
+    released_units: 0,
   }
 }
 
@@ -204,18 +206,53 @@ test full_exit_after_end() {
   )
 }
 
-test cannot_skim_native_assets_on_partial_release() {
-  let datum = stepped()
+fn vests_token(datum: LinearVestingDatum) -> LinearVestingDatum {
+  LinearVestingDatum { ..datum, asset: Some((policy, "VEST")) }
+}
 
+fn released_both(
+  datum: LinearVestingDatum,
+  amount: Int,
+  units: Int,
+) -> LinearVestingDatum {
+  LinearVestingDatum { ..datum, released: amount, released_units: units }
+}
+
+test stepped_native_assets_vest_proportionally() {
+  let datum = vests_token(stepped())
+
+  // One step of eight elapsed, so 100/8 = 12 units are releasable.
+  linear_wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 100))],
+      [
+        continuing_output(
+          released_both(datum, 10_000_000, 12),
+          with_token(ada(70_000_000), 88),
+        ),
+        payout(with_token(ada(10_000_000), 12)),
+      ],
+      start + 10,
+      [beneficiary],
+    ),
+  )
+}
+
+test cannot_skim_native_assets_on_partial_release() {
+  let datum = vests_token(stepped())
+
+  // 41 units claimed at the first step, where only 12 have vested.
   !linear_wallet.release(
     datum,
     own_ref(),
     tx(
-      [wallet_input(datum, with_token(ada(total), 42))],
+      [wallet_input(datum, with_token(ada(total), 100))],
       [
         continuing_output(
-          released(datum, 10_000_000),
-          with_token(ada(70_000_000), 1),
+          released_both(datum, 10_000_000, 41),
+          with_token(ada(70_000_000), 59),
         ),
         payout(with_token(ada(10_000_000), 41)),
       ],
@@ -234,6 +271,8 @@ test invalid_linear_schedule_rejected() fail {
     period: 0,
     steps: 8,
     released: 0,
+    asset: None,
+    released_units: 0,
   }
 
   linear_wallet.release(

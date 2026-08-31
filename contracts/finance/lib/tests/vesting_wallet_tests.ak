@@ -47,7 +47,16 @@ fn sibling_ref() -> OutputReference {
 }
 
 fn linear() -> VestingDatum {
-  VestingDatum { beneficiary, grantor, start, cliff: 0, duration, released: 0 }
+  VestingDatum {
+    beneficiary,
+    grantor,
+    start,
+    cliff: 0,
+    duration,
+    released: 0,
+    asset: None,
+    released_units: 0,
+  }
 }
 
 fn released(datum: VestingDatum, amount: Int) -> VestingDatum {
@@ -220,20 +229,134 @@ test cannot_split_wallet_across_two_outputs() {
   )
 }
 
+// M-04: the vested asset has its own ledger, on the same schedule as lovelace.
+fn vests_token(datum: VestingDatum) -> VestingDatum {
+  VestingDatum { ..datum, asset: Some((policy, "VEST")) }
+}
+
+fn released_both(datum: VestingDatum, amount: Int, units: Int) -> VestingDatum {
+  VestingDatum { ..datum, released: amount, released_units: units }
+}
+
+test native_assets_vest_proportionally() {
+  let datum = vests_token(linear())
+
+  // 100 units locked, midpoint of the schedule, so 50 units are releasable.
+  wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 100))],
+      [
+        continuing_output(
+          released_both(datum, half, 50),
+          with_token(ada(half), 50),
+        ),
+        payout(with_token(ada(half), 50)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
 test cannot_skim_native_assets_on_partial_release() {
-  let datum = linear()
+  let datum = vests_token(linear())
+
+  // 60 units claimed where only 50 have vested.
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 100))],
+      [
+        continuing_output(
+          released_both(datum, half, 60),
+          with_token(ada(half), 40),
+        ),
+        payout(with_token(ada(half), 60)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test released_units_must_advance_with_the_claim() {
+  let datum = vests_token(linear())
+
+  // Units leave, but the counter is not advanced.
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 100))],
+      [
+        continuing_output(
+          released_both(datum, half, 0),
+          with_token(ada(half), 50),
+        ),
+        payout(with_token(ada(half), 50)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test vested_units_must_reach_the_beneficiary() {
+  let datum = vests_token(linear())
 
   !wallet.release(
     datum,
     own_ref(),
     tx(
-      [wallet_input(datum, with_token(ada(total), 42))],
+      [wallet_input(datum, with_token(ada(total), 100))],
       [
-        continuing_output(released(datum, half), with_token(ada(half), 1)),
-        payout(with_token(ada(half), 41)),
+        continuing_output(
+          released_both(datum, half, 50),
+          with_token(ada(half), 50),
+        ),
+        payout(ada(half)),
+        to_stranger(assets.from_asset(policy, "VEST", 50)),
       ],
       start + 50,
       [beneficiary],
+    ),
+  )
+}
+
+test a_wallet_holding_an_unvested_asset_is_unspendable() fail {
+  // `asset: None` but the UTxO carries tokens: nothing vests them, so `release`
+  // refuses outright rather than letting them leave un-scheduled.
+  let datum = linear()
+
+  wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 42))],
+      [
+        continuing_output(released(datum, half), with_token(ada(half), 42)),
+        payout(ada(half)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test grantor_can_reclaim_a_wallet_holding_an_unvested_asset() {
+  let datum = linear()
+
+  wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, with_token(ada(total), 42))],
+      [to_grantor(with_token(ada(total), 42))],
+      start,
+      [grantor],
     ),
   )
 }
