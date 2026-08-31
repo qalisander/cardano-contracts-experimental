@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:developers.cardano.org)",
+      "WebFetch(domain:plutusvn.readthedocs.io)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:www.mlabs.city)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:freedium.cfd)",
+      "WebFetch(domain:aiken-lang.org)"
+    ]
+  }
+}
