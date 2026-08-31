@@ -580,3 +580,135 @@ test accept_renounce_requires_a_root_signer() {
     tx_with_signers([bob, carol]),
   ) == access_control.Failure(access_control.Unauthorized)
 }
+
+// M-01: `roles` arrives as wire-form `Pairs`, so a malformed registry is now
+// expressible in a test — it was not while the field was an opaque `Dict`, which
+// is precisely why this class of bug went unnoticed.
+const role_pauser = "PAUSER_ROLE"
+
+fn registry_with_roles(
+  roles: Pairs<access_control.Role, access_control.RoleData>,
+) -> access_control.AccessControl {
+  access_control.AccessControl {
+    root_role: access_control.default_admin_role,
+    roles,
+    default_admin: Some(admin),
+    pending_default_admin: None,
+    pending_default_admin_delay_change: None,
+    default_admin_delay_ms: 0,
+  }
+}
+
+fn writer_administered_by_pauser() -> access_control.RoleData {
+  access_control.RoleData { members: [alice], admin_role: role_pauser }
+}
+
+test well_formed_roles_resolve() {
+  let ac = registry_with_roles(
+    [Pair(role_writer, writer_administered_by_pauser())],
+  )
+
+  and {
+    access_control.has_role(ac, role_writer, alice)?,
+    access_control.get_role_admin(ac, role_writer) == Some(role_pauser),
+  }
+}
+
+test roles_in_descending_order_are_rejected() fail {
+  // "WRITER_ROLE" placed after "ZZZ" is unreachable to a Dict lookup: the scan
+  // gives up early. Before this fix that silently reported alice as a non-member
+  // and handed `role_writer`'s administration back to root.
+  let ac = registry_with_roles(
+    [
+      Pair(
+        "ZZZ",
+        access_control.RoleData { members: [], admin_role: role_pauser },
+      ),
+      Pair(role_writer, writer_administered_by_pauser()),
+    ],
+  )
+
+  access_control.has_role(ac, role_writer, alice)
+}
+
+test roles_with_duplicate_keys_are_rejected() fail {
+  let ac = registry_with_roles(
+    [
+      Pair(
+        role_writer,
+        access_control.RoleData { members: [], admin_role: role_pauser },
+      ),
+      Pair(role_writer, writer_administered_by_pauser()),
+    ],
+  )
+
+  access_control.has_role(ac, role_writer, alice)
+}
+
+test malformed_roles_cannot_reclaim_a_delegation() fail {
+  // The M-01 exploit: hide `role_writer` so `get_role_admin` falls back to root,
+  // then have root grant a role it was never delegated.
+  let ac = registry_with_roles(
+    [
+      Pair(
+        "ZZZ",
+        access_control.RoleData { members: [], admin_role: role_pauser },
+      ),
+      Pair(role_writer, writer_administered_by_pauser()),
+    ],
+  )
+
+  access_control.grant_role(ac, role_writer, bob, tx_with_signers([admin])) == access_control.Success(
+    ac,
+  )
+}
+
+test get_role_admin_distinguishes_unconfigured_from_root() {
+  let ac = registry_with_roles(
+    [Pair(role_writer, writer_administered_by_pauser())],
+  )
+
+  and {
+    // configured: the delegation is reported as-is
+    access_control.get_role_admin(ac, role_writer) == Some(role_pauser),
+    // the root role administers itself
+    access_control.get_role_admin(ac, access_control.default_admin_role) == Some(
+      access_control.default_admin_role,
+    ),
+    // unconfigured is None, NOT Some(root_role)
+    access_control.get_role_admin(ac, "NEVER_CONFIGURED") == None,
+  }
+}
+
+test root_can_still_create_an_unconfigured_role() {
+  // Bootstrap must survive: an absent role is root-administered so root can
+  // create it, and the first grant persists `admin_role` into state.
+  let ac = registry_with_roles([])
+
+  expect access_control.Success(ac1) = access_control.grant_role(
+    ac,
+    role_writer,
+    alice,
+    tx_with_signers([admin]),
+  )
+
+  and {
+    access_control.has_role(ac1, role_writer, alice)?,
+    // no longer implicit — the default is now written down
+    access_control.get_role_admin(ac1, role_writer) == Some(
+      access_control.default_admin_role,
+    ),
+  }
+}
+
+test non_root_cannot_create_an_unconfigured_role() fail {
+  let ac = registry_with_roles([])
+
+  expect access_control.Success(_) = access_control.grant_role(
+    ac,
+    role_writer,
+    alice,
+    tx_with_signers([bob]),
+  )
+  True
+}

@@ -33,8 +33,16 @@ pub type AccessControl {
   AccessControl {
     /// Canonical identifier of the root role.
     root_role: Role,
-    /// Non-root role map. Root role membership is stored in `default_admin`.
-    roles: Dict<Role, RoleData>,
+    /// Non-root role map, in wire form. Root role membership is stored in
+    /// `default_admin`.
+    ///
+    /// > [!IMPORTANT]
+    /// > Entries MUST be ordered by ascending `Role` with no duplicates. This is
+    /// > the invariant `Dict` lookups rely on, and it is NOT checked when a datum
+    /// > is coerced from CBOR — so it is checked here instead, by `roles_of`,
+    /// > which every read goes through. A malformed registry fails the script
+    /// > rather than silently reporting a member as absent.
+    roles: Pairs<Role, RoleData>,
     /// Current root role holder.
     default_admin: Option<VerificationKeyHash>,
     /// Pending root transfer (`Some(new_admin)`) or renounce (`None`).
@@ -136,7 +144,7 @@ pub fn new_with_root(
 ) -> AccessControl {
   AccessControl {
     root_role,
-    roles: dict.empty,
+    roles: [],
     default_admin: Some(initial_admin),
     pending_default_admin: None,
     pending_default_admin_delay_change: None,
@@ -556,30 +564,59 @@ pub fn has_role(
   if role == ac.root_role {
     ac.default_admin == Some(account)
   } else {
-    when dict.get(ac.roles, role) is {
+    when dict.get(roles_of(ac), role) is {
       Some(role_data) -> list.has(role_data.members, account)
       None -> False
     }
   }
 }
 
-/// Return the role that administers role.
+/// Return the role that administers `role`, if `role` is configured.
 ///
 /// Parameters:
 /// - `ac`: registry to query.
 /// - `role`: role identifier to inspect.
 /// Returns:
-/// - Admin role for `role`, defaulting to root role when unconfigured.
+/// - `Some(admin_role)` for the root role and for every configured role.
+/// - `None` when `role` has no entry in the registry.
 /// Errors:
-/// - None.
-pub fn get_role_admin(ac: AccessControl, role: Role) -> Role {
+/// - None. Fails the script when `roles` is malformed; see `roles_of`.
+///
+/// `None` means *unconfigured*, which is deliberately distinguishable from
+/// "administered by root". Conflating the two is what let a lookup miss read as a
+/// root delegation.
+pub fn get_role_admin(ac: AccessControl, role: Role) -> Option<Role> {
   if role == ac.root_role {
-    ac.root_role
+    Some(ac.root_role)
   } else {
-    when dict.get(ac.roles, role) is {
-      Some(role_data) -> role_data.admin_role
-      None -> ac.root_role
+    when dict.get(roles_of(ac), role) is {
+      Some(role_data) -> Some(role_data.admin_role)
+      None -> None
     }
+  }
+}
+
+/// Lift the datum's wire-form `roles` into a `Dict`, proving the ascending-unique
+/// key invariant that `dict.get` depends on.
+///
+/// Fails the script on disorder or duplicate keys. Every read of `roles` goes
+/// through this, so a hand-crafted registry datum cannot make a member vanish or
+/// fork a role's membership list.
+pub fn roles_of(ac: AccessControl) -> Dict<Role, RoleData> {
+  dict.from_ascending_pairs(ac.roles)
+}
+
+/// The role whose holders may administer `role`.
+///
+/// Configured roles use their stored `admin_role`. A role with no entry yet is
+/// root-administered, so that root can create it — `grant_role_unchecked` then
+/// persists `admin_role: root_role` into state, making the default explicit from
+/// the first grant onward. This fallback is safe only because `roles_of` rejects a
+/// malformed map: a miss now means "genuinely absent", never "unreachable key".
+fn admin_role_for(ac: AccessControl, role: Role) -> Role {
+  when get_role_admin(ac, role) is {
+    Some(admin_role) -> admin_role
+    None -> ac.root_role
   }
 }
 
@@ -638,7 +675,7 @@ pub fn grant_role_as(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let admin_role = get_role_admin(ac, role)
+    let admin_role = admin_role_for(ac, role)
     if has_role(ac, admin_role, actor) {
       Success(grant_role_unchecked(ac, role, account))
     } else {
@@ -670,7 +707,7 @@ pub fn grant_role(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let admin_role = get_role_admin(ac, role)
+    let admin_role = admin_role_for(ac, role)
     if signer_has_role(ac, tx, admin_role) {
       Success(grant_role_unchecked(ac, role, account))
     } else {
@@ -702,7 +739,7 @@ pub fn revoke_role_as(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let admin_role = get_role_admin(ac, role)
+    let admin_role = admin_role_for(ac, role)
     if has_role(ac, admin_role, actor) {
       Success(revoke_role_unchecked(ac, role, account))
     } else {
@@ -734,7 +771,7 @@ pub fn revoke_role(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let admin_role = get_role_admin(ac, role)
+    let admin_role = admin_role_for(ac, role)
     if signer_has_role(ac, tx, admin_role) {
       Success(revoke_role_unchecked(ac, role, account))
     } else {
@@ -828,7 +865,7 @@ pub fn set_role_admin_as(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let previous_admin_role = get_role_admin(ac, role)
+    let previous_admin_role = admin_role_for(ac, role)
     if has_role(ac, previous_admin_role, actor) {
       Success(set_role_admin_unchecked(ac, role, new_admin_role))
     } else {
@@ -860,7 +897,7 @@ pub fn set_role_admin(
   if is_reserved_role(ac, role) {
     Failure(CannotManageRootRole)
   } else {
-    let previous_admin_role = get_role_admin(ac, role)
+    let previous_admin_role = admin_role_for(ac, role)
     if signer_has_role(ac, tx, previous_admin_role) {
       Success(set_role_admin_unchecked(ac, role, new_admin_role))
     } else {
@@ -1262,7 +1299,7 @@ fn is_reserved_role(ac: AccessControl, role: Role) -> Bool {
 
 /// Returns current role data or a root-administered empty default entry.
 fn role_data_or_default(ac: AccessControl, role: Role) -> RoleData {
-  when dict.get(ac.roles, role) is {
+  when dict.get(roles_of(ac), role) is {
     Some(role_data) -> role_data
     None -> RoleData { members: [], admin_role: ac.root_role }
   }
@@ -1276,7 +1313,7 @@ fn with_role_data(
 ) -> AccessControl {
   AccessControl {
     root_role: ac.root_role,
-    roles: dict.insert(ac.roles, role, role_data),
+    roles: dict.insert(roles_of(ac), role, role_data) |> dict.to_pairs,
     default_admin: ac.default_admin,
     pending_default_admin: ac.pending_default_admin,
     pending_default_admin_delay_change: ac.pending_default_admin_delay_change,
@@ -1364,7 +1401,7 @@ fn revoke_role_unchecked(
   role: Role,
   account: VerificationKeyHash,
 ) -> AccessControl {
-  when dict.get(ac.roles, role) is {
+  when dict.get(roles_of(ac), role) is {
     None -> ac
     Some(current) ->
       if list.has(current.members, account) {
