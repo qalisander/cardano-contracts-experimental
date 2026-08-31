@@ -4,7 +4,7 @@ use cardano/assets
 use cardano/transaction.{
   InlineDatum, Input, NoDatum, Output, OutputReference, Transaction,
 }
-use sources/vesting/types.{Release, VestingDatum, VestingRedeemer}
+use sources/vesting/types.{ReclaimInvalid, Release, VestingDatum, VestingRedeemer}
 use sources/vesting/wallet
 
 /// A linear vesting wallet validator.
@@ -16,8 +16,10 @@ validator vesting_wallet {
     self: Transaction,
   ) {
     expect Some(datum) = datum
-    let Release = redeemer
-    wallet.release(datum, own_ref, self)
+    when redeemer is {
+      Release -> wallet.release(datum, own_ref, self)
+      ReclaimInvalid -> wallet.reclaim_invalid(datum, own_ref, self)
+    }
   }
 
   else(_) {
@@ -28,11 +30,14 @@ validator vesting_wallet {
 // Minimal handler tests; release semantics live in wallet tests.
 const beneficiary = #"bebebebebebebebebebebebebebebebebebebebebebebebebebebebe"
 
+const grantor = #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
 const script = #"5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c"
 
 fn schedule() -> VestingDatum {
   VestingDatum {
     beneficiary,
+    grantor,
     start: 1000,
     cliff: 0,
     duration: 100,

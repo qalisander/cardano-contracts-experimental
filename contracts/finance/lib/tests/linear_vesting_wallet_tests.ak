@@ -10,6 +10,8 @@ use sources/vesting/linear_wallet
 
 const beneficiary = #"bebebebebebebebebebebebebebebebebebebebebebebebebebebebe"
 
+const grantor = #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
 const own_script = #"6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d"
 
 const policy = #"70707070707070707070707070707070707070707070707070707070"
@@ -32,6 +34,7 @@ fn own_ref() -> OutputReference {
 fn stepped() -> LinearVestingDatum {
   LinearVestingDatum {
     beneficiary,
+    grantor,
     start,
     cliff: 0,
     period: 10,
@@ -225,6 +228,7 @@ test cannot_skim_native_assets_on_partial_release() {
 test invalid_linear_schedule_rejected() fail {
   let datum = LinearVestingDatum {
     beneficiary,
+    grantor,
     start,
     cliff: 0,
     period: 0,
@@ -324,6 +328,80 @@ test continuing_output_must_carry_no_reference_script() {
       ],
       start + 50,
       [beneficiary],
+    ),
+  )
+}
+
+// M-05 mirrors for the stepped wallet.
+fn broken_stepped() -> LinearVestingDatum {
+  LinearVestingDatum { ..stepped(), period: 0 }
+}
+
+fn to_grantor(value: Value) -> Output {
+  Output {
+    address: address.from_verification_key(grantor),
+    value,
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+test grantor_can_reclaim_an_invalid_stepped_schedule() {
+  let datum = broken_stepped()
+
+  linear_wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_grantor(ada(total))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+test grantor_cannot_reclaim_a_valid_stepped_schedule() fail {
+  let datum = stepped()
+
+  linear_wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_grantor(ada(total))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+test stranger_cannot_reclaim_an_invalid_stepped_schedule() {
+  let datum = broken_stepped()
+
+  !linear_wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_stranger(ada(total))],
+      start,
+      [stranger],
+    ),
+  )
+}
+
+test stepped_reclaim_must_pay_the_grantor() {
+  let datum = broken_stepped()
+
+  !linear_wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_stranger(ada(total))],
+      start,
+      [grantor],
     ),
   )
 }

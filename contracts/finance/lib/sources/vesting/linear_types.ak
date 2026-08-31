@@ -9,6 +9,9 @@ pub type PosixTime =
 pub type LinearVestingDatum {
   /// Key hash allowed to release vested funds.
   beneficiary: VerificationKeyHash,
+  /// Key hash allowed to reclaim this wallet, and ONLY when its schedule is
+  /// ill-formed. A well-formed grant is never revocable.
+  grantor: VerificationKeyHash,
   /// Vesting start timestamp.
   start: PosixTime,
   /// Duration after start before any step can be released.
@@ -24,4 +27,7 @@ pub type LinearVestingDatum {
 /// Actions supported by the linear vesting wallet.
 pub type LinearVestingRedeemer {
   Release
+  /// Escape hatch for a wallet funded with a schedule `is_valid` rejects, which
+  /// `Release` can never spend. Guarded so it cannot touch a valid grant.
+  ReclaimInvalid
 }

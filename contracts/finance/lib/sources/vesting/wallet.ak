@@ -34,7 +34,7 @@ pub fn release(
     // whole balance must reach the beneficiary.
     [] -> and {
         releasable >= locked,
-        net_to_beneficiary(datum.beneficiary, self) >= locked,
+        net_lovelace_to(datum.beneficiary, self) >= locked,
       }
     [continuing] -> {
       expect InlineDatum(raw_datum) = continuing.datum
@@ -53,7 +53,7 @@ pub fn release(
         ),
         next == VestingDatum { ..datum, released: datum.released + claimed },
         // The released lovelace must actually reach the beneficiary.
-        net_to_beneficiary(datum.beneficiary, self) >= claimed,
+        net_lovelace_to(datum.beneficiary, self) >= claimed,
       }
     }
     // Multiple continuing outputs are rejected to prevent schedule splitting.
@@ -61,19 +61,47 @@ pub fn release(
   }
 }
 
-/// Net lovelace the beneficiary gains from this transaction, counting the fee they
-/// covered.
+/// Net lovelace `key` gains from this transaction, counting the fee it covered.
 ///
-/// Inputs the beneficiary contributes are subtracted, so their own change cannot
-/// be counted as a vesting payout: a builder who spends a 100 ADA beneficiary UTxO
-/// for fees would otherwise satisfy a naive "outputs to beneficiary >= claimed"
-/// check while sending the released lovelace elsewhere. `self.fee` is added back
-/// because the beneficiary legitimately pays it out of the same pocket.
-fn net_to_beneficiary(
-  beneficiary: VerificationKeyHash,
+/// Inputs contributed by `key` are subtracted, so its own change cannot be counted
+/// as a payout: a builder who spends a 100 ADA beneficiary UTxO for fees would
+/// otherwise satisfy a naive "outputs to beneficiary >= claimed" check while
+/// sending the released lovelace elsewhere. `self.fee` is added back because the
+/// recipient legitimately pays it out of the same pocket.
+/// Validate a grantor reclaim of a wallet whose schedule is unusable.
+///
+/// `schedule.is_valid` guards `release`, so a wallet funded with (for example)
+/// `duration: 0` can never be spent by the beneficiary — and nothing validates a
+/// datum at creation, because creating an output runs no script. This arm is the
+/// only path out of that state.
+///
+/// Mutually exclusive with `release` by construction: the negated `is_valid` below
+/// holds only where `release` provably fails, so a well-formed grant stays
+/// non-revocable and this is not an admin backdoor.
+pub fn reclaim_invalid(
+  datum: VestingDatum,
+  own_ref: OutputReference,
   self: Transaction,
-) -> Int {
-  let credential = VerificationKey(beneficiary)
+) -> Bool {
+  expect !schedule.is_valid(datum)
+
+  expect Some(own_input) = self.inputs |> find_input(own_ref)
+  let own_credential = own_input.output.address.payment_credential
+
+  expect [_] = self.inputs |> list.filter(paid_from(own_credential))
+
+  let locked = assets.lovelace_of(own_input.output.value)
+
+  and {
+    // A full unwind: nothing may remain at the script address.
+    !list.any(self.outputs, paid_to(own_credential)),
+    list.has(self.extra_signatories, datum.grantor),
+    net_lovelace_to(datum.grantor, self) >= locked,
+  }
+}
+
+fn net_lovelace_to(key: VerificationKeyHash, self: Transaction) -> Int {
+  let credential = VerificationKey(key)
 
   let received = self.outputs
     |> list.foldl(

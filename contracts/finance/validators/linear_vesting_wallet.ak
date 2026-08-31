@@ -5,7 +5,7 @@ use cardano/transaction.{
   InlineDatum, Input, NoDatum, Output, OutputReference, Transaction,
 }
 use sources/vesting/linear_types.{
-  Release, LinearVestingDatum, LinearVestingRedeemer,
+  ReclaimInvalid, Release, LinearVestingDatum, LinearVestingRedeemer,
 }
 use sources/vesting/linear_wallet
 
@@ -18,8 +18,10 @@ validator linear_vesting_wallet {
     self: Transaction,
   ) {
     expect Some(datum) = datum
-    let Release = redeemer
-    linear_wallet.release(datum, own_ref, self)
+    when redeemer is {
+      Release -> linear_wallet.release(datum, own_ref, self)
+      ReclaimInvalid -> linear_wallet.reclaim_invalid(datum, own_ref, self)
+    }
   }
 
   else(_) {
@@ -29,11 +31,14 @@ validator linear_vesting_wallet {
 
 const beneficiary = #"bebebebebebebebebebebebebebebebebebebebebebebebebebebebe"
 
+const grantor = #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
 const script = #"6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d6d"
 
 fn schedule() -> LinearVestingDatum {
   LinearVestingDatum {
     beneficiary,
+    grantor,
     start: 1000,
     cliff: 0,
     period: 10,

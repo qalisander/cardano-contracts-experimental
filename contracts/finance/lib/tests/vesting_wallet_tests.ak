@@ -10,6 +10,8 @@ use sources/vesting/wallet
 
 const beneficiary = #"bebebebebebebebebebebebebebebebebebebebebebebebebebebebe"
 
+const grantor = #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
 const stranger = #"babababababababababababababababababababababababababababa"
 
 const own_script = #"5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c"
@@ -45,7 +47,7 @@ fn sibling_ref() -> OutputReference {
 }
 
 fn linear() -> VestingDatum {
-  VestingDatum { beneficiary, start, cliff: 0, duration, released: 0 }
+  VestingDatum { beneficiary, grantor, start, cliff: 0, duration, released: 0 }
 }
 
 fn released(datum: VestingDatum, amount: Int) -> VestingDatum {
@@ -444,6 +446,113 @@ test continuing_output_must_carry_no_reference_script() {
         payout(ada(half)),
       ],
       start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+// M-05: an ill-formed schedule can never be spent via `Release`, so without a
+// recovery arm the funds are lost. `reclaim_invalid` is the only path out, and it
+// must be unreachable for a well-formed grant.
+fn broken() -> VestingDatum {
+  VestingDatum { ..linear(), duration: 0 }
+}
+
+fn to_grantor(value: Value) -> Output {
+  Output {
+    address: address.from_verification_key(grantor),
+    value,
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+test grantor_can_reclaim_an_invalid_schedule() {
+  let datum = broken()
+
+  wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_grantor(ada(total))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+// The guard aborts the script rather than returning False, hence `fail`.
+test grantor_cannot_reclaim_a_valid_schedule() fail {
+  let datum = linear()
+
+  wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_grantor(ada(total))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+test stranger_cannot_reclaim_an_invalid_schedule() {
+  let datum = broken()
+
+  !wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_stranger(ada(total))],
+      start,
+      [stranger],
+    ),
+  )
+}
+
+test reclaim_must_pay_the_grantor() {
+  let datum = broken()
+
+  !wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_stranger(ada(total))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+test reclaim_cannot_leave_value_at_the_script() {
+  let datum = broken()
+
+  !wallet.reclaim_invalid(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [continuing_output(datum, ada(half)), to_grantor(ada(half))],
+      start,
+      [grantor],
+    ),
+  )
+}
+
+test release_still_rejects_an_invalid_schedule() fail {
+  let datum = broken()
+
+  wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [payout(ada(total))],
+      start + 1_000_000,
       [beneficiary],
     ),
   )
