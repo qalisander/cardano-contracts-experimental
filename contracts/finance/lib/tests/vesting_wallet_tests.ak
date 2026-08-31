@@ -298,3 +298,153 @@ test cannot_change_script_address_on_partial_release() {
     ),
   )
 }
+
+// M-03: released lovelace must reach the beneficiary, and the beneficiary's own
+// change must not be counted as that payout.
+fn to_stranger(value: Value) -> Output {
+  Output {
+    address: address.from_verification_key(stranger),
+    value,
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+fn beneficiary_input(ref: OutputReference, value: Value) -> Input {
+  Input {
+    output_reference: ref,
+    output: Output {
+      address: address.from_verification_key(beneficiary),
+      value,
+      datum: NoDatum,
+      reference_script: None,
+    },
+  }
+}
+
+fn fee_ref() -> OutputReference {
+  OutputReference {
+    transaction_id: #"0202020202020202020202020202020202020202020202020202020202020202",
+    output_index: 7,
+  }
+}
+
+test release_must_pay_the_beneficiary() {
+  let datum = linear()
+
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [
+        continuing_output(released(datum, half), ada(half)),
+        to_stranger(ada(half)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test full_exit_must_pay_the_beneficiary() {
+  let datum = linear()
+
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [to_stranger(ada(total))],
+      schedule.end(datum),
+      [beneficiary],
+    ),
+  )
+}
+
+test beneficiary_change_cannot_be_counted_as_payout() {
+  // The subtle version: the builder spends a beneficiary-owned UTxO "for fees",
+  // sends the released lovelace to a stranger, and returns change to the
+  // beneficiary. Summing beneficiary outputs alone would accept this.
+  let datum = linear()
+
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [
+        wallet_input(datum, ada(total)),
+        beneficiary_input(fee_ref(), ada(total)),
+      ],
+      [
+        continuing_output(released(datum, half), ada(half)),
+        to_stranger(ada(half)),
+        payout(ada(total)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test release_allows_the_beneficiary_to_pay_fees() {
+  // Happy path with a real fee: the beneficiary funds the fee from their own UTxO
+  // and receives the claim minus that fee.
+  let datum = linear()
+  let fee = 2_000_000
+  let base = tx(
+    [
+      wallet_input(datum, ada(total)),
+      beneficiary_input(fee_ref(), ada(10_000_000)),
+    ],
+    [
+      continuing_output(released(datum, half), ada(half)),
+      payout(ada(half + 10_000_000 - fee)),
+    ],
+    start + 50,
+    [beneficiary],
+  )
+
+  wallet.release(datum, own_ref(), Transaction { ..base, fee })
+}
+
+test release_allows_the_payout_split_across_outputs() {
+  let datum = linear()
+
+  wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [
+        continuing_output(released(datum, half), ada(half)),
+        payout(ada(20_000_000)),
+        payout(ada(30_000_000)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+// L-01: the continuing output must carry no reference script.
+test continuing_output_must_carry_no_reference_script() {
+  let datum = linear()
+
+  !wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [
+        Output {
+          ..continuing_output(released(datum, half), ada(half)),
+          reference_script: Some(other_script),
+        },
+        payout(ada(half)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}

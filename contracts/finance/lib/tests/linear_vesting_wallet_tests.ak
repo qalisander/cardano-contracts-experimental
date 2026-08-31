@@ -238,3 +238,92 @@ test invalid_linear_schedule_rejected() fail {
     release_tx(datum, total, released(datum, 1), total - 1, start + 10),
   )
 }
+
+// M-03 / L-01 mirrors. The stepped wallet shares `release`'s shape, so it needs
+// the same guarantees asserted independently — the two modules are near-verbatim
+// duplicates and will drift otherwise (report I-01d).
+const stranger = #"babababababababababababababababababababababababababababa"
+
+const spare_script = #"0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e"
+
+fn to_stranger(value: Value) -> Output {
+  Output {
+    address: address.from_verification_key(stranger),
+    value,
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+fn beneficiary_input(value: Value) -> Input {
+  Input {
+    output_reference: OutputReference {
+      transaction_id: #"0404040404040404040404040404040404040404040404040404040404040404",
+      output_index: 3,
+    },
+    output: Output {
+      address: address.from_verification_key(beneficiary),
+      value,
+      datum: NoDatum,
+      reference_script: None,
+    },
+  }
+}
+
+test release_must_pay_the_beneficiary() {
+  let datum = stepped()
+
+  !linear_wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [
+        continuing_output(released(datum, 40_000_000), ada(40_000_000)),
+        to_stranger(ada(40_000_000)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test beneficiary_change_cannot_be_counted_as_payout() {
+  let datum = stepped()
+
+  !linear_wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total)), beneficiary_input(ada(total))],
+      [
+        continuing_output(released(datum, 40_000_000), ada(40_000_000)),
+        to_stranger(ada(40_000_000)),
+        payout(ada(total)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
+
+test continuing_output_must_carry_no_reference_script() {
+  let datum = stepped()
+
+  !linear_wallet.release(
+    datum,
+    own_ref(),
+    tx(
+      [wallet_input(datum, ada(total))],
+      [
+        Output {
+          ..continuing_output(released(datum, 40_000_000), ada(40_000_000)),
+          reference_script: Some(spare_script),
+        },
+        payout(ada(40_000_000)),
+      ],
+      start + 50,
+      [beneficiary],
+    ),
+  )
+}
