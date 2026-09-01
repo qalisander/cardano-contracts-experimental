@@ -28,7 +28,11 @@ Each package has its own:
 
 - `aiken.toml`
 - `lib/` (sources and tests)
-- `validators/` (on-chain entrypoints)
+- `validators/` (on-chain entrypoints, where the package ships any)
+
+`contracts/access/` is a **library package with no validators**: it provides pure
+role-registry state transitions that a consuming validator must enforce. See its
+README section "Integrating this library" before embedding it in a datum.
 
 ### Run Checks
 

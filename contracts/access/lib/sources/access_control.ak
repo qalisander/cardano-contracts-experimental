@@ -9,6 +9,13 @@ use cardano/transaction.{Transaction}
 /// model by storing authorization state in plain data and checking transaction
 /// signers when mutating state.
 ///
+/// > [!IMPORTANT]
+/// > This is a library: it *computes* state transitions, it does not *enforce*
+/// > them. A validator embedding `AccessControl` in its datum must authenticate
+/// > the state UTxO, constrain its continuing output, and recompute-and-compare
+/// > against these functions. See "Integrating this library" in the package
+/// > README — none of the invariants below hold on their own.
+///
 /// Structural invariants:
 /// 1. Root role membership is stored only in `default_admin`.
 /// 2. Non-root roles are stored in `roles` and are root-administered by default.
@@ -620,24 +627,6 @@ fn admin_role_for(ac: AccessControl, role: Role) -> Role {
   }
 }
 
-/// Convenience predicate for role-gated call sites and validators.
-///
-/// Parameters:
-/// - `ac`: registry to query.
-/// - `role`: role identifier to check.
-/// - `account`: account to test membership for.
-/// Returns:
-/// - Same boolean result as `has_role`.
-/// Errors:
-/// - None.
-pub fn assert_has_role(
-  ac: AccessControl,
-  role: Role,
-  account: VerificationKeyHash,
-) -> Bool {
-  has_role(ac, role, account)
-}
-
 /// Return true when at least one transaction signer currently holds role.
 ///
 /// Parameters:
@@ -649,7 +638,7 @@ pub fn assert_has_role(
 /// Errors:
 /// - None.
 pub fn tx_has_role(ac: AccessControl, tx: Transaction, role: Role) -> Bool {
-  signer_has_role(ac, tx, role)
+  list.any(tx.extra_signatories, fn(signer) { has_role(ac, role, signer) })
 }
 
 /// Grant role using an explicit actor.
@@ -708,7 +697,7 @@ pub fn grant_role(
     Failure(CannotManageRootRole)
   } else {
     let admin_role = admin_role_for(ac, role)
-    if signer_has_role(ac, tx, admin_role) {
+    if tx_has_role(ac, tx, admin_role) {
       Success(grant_role_unchecked(ac, role, account))
     } else {
       Failure(Unauthorized)
@@ -772,7 +761,7 @@ pub fn revoke_role(
     Failure(CannotManageRootRole)
   } else {
     let admin_role = admin_role_for(ac, role)
-    if signer_has_role(ac, tx, admin_role) {
+    if tx_has_role(ac, tx, admin_role) {
       Success(revoke_role_unchecked(ac, role, account))
     } else {
       Failure(Unauthorized)
@@ -898,7 +887,7 @@ pub fn set_role_admin(
     Failure(CannotManageRootRole)
   } else {
     let previous_admin_role = admin_role_for(ac, role)
-    if signer_has_role(ac, tx, previous_admin_role) {
+    if tx_has_role(ac, tx, previous_admin_role) {
       Success(set_role_admin_unchecked(ac, role, new_admin_role))
     } else {
       Failure(Unauthorized)
@@ -1252,11 +1241,6 @@ pub fn cancel_default_admin_transfer(
     Some(actor) -> cancel_default_admin_transfer_as(ac, actor)
     None -> Failure(Unauthorized)
   }
-}
-
-/// Returns true when any transaction signer currently holds `role`.
-fn signer_has_role(ac: AccessControl, tx: Transaction, role: Role) -> Bool {
-  list.any(tx.extra_signatories, fn(signer) { has_role(ac, role, signer) })
 }
 
 /// Returns the first signer in the transaction that holds `role`.
