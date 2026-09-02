@@ -1,10 +1,11 @@
-name = "finance"
+name = "openzeppelin/finance"
 version = "0.1.0"
+compiler = "v1.1.23"
 plutusVersion = "v3"
 licences = ["MIT"]
 description = "Vesting wallet primitives for Cardano smart contracts in Aiken"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "v2"
+version = "v2.2.0"
 source = "github"
