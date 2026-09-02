@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with the `compiler` field in each package's aiken.toml.
+  AIKEN_VERSION: v1.1.23
+
+jobs:
+  aiken:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [access, finance]
+    defaults:
+      run:
+        working-directory: contracts/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Aiken
+        uses: aiken-lang/setup-aiken@v1
+        with:
+          version: ${{ env.AIKEN_VERSION }}
+
+      - name: Report toolchain
+        run: aiken --version
+
+      # `aiken lsp` rewrites this field to the bare directory name, which the CLI
+      # then refuses to load — so a manifest nobody edited can break the build.
+      # Fail with an explanation rather than a parser stack trace.
+      - name: Validate manifest name
+        run: |
+          name=$(sed -n '1s/^name *= *"\(.*\)"/\1/p' aiken.toml)
+          echo "name = $name"
+          case "$name" in
+            */*) ;;
+            *)
+              echo "::error file=contracts/${{ matrix.package }}/aiken.toml,line=1::aiken.toml name \"$name\" contains no '/'. The aiken CLI requires <owner>/<repo> and refuses to load the project otherwise. Note that 'aiken lsp' rewrites this field to the bare directory name, so this can regress without anyone editing the file."
+              exit 1
+              ;;
+          esac
+
+      # One directory per invocation: `aiken fmt --check lib validators` fails
+      # silently on multiple path arguments, and a bare `.` would also walk the
+      # dependencies vendored into build/.
+      - name: Format
+        run: |
+          for dir in lib validators; do
+            if [ -d "$dir" ]; then
+              echo "fmt --check $dir"
+              aiken fmt --check "$dir"
+            fi
+          done
+
+      - name: Check
+        run: aiken check --deny
+
+      # A library package has no validators; `aiken build` only warns there, and
+      # --deny would turn that warning into a failure.
+      - name: Build
+        run: |
+          if [ -d validators ]; then
+            aiken build --deny
+          else
+            echo "No validators/ — library-only package, nothing to build."
+          fi
+
+      - name: Upload blueprint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plutus-${{ matrix.package }}
+          path: contracts/${{ matrix.package }}/plutus.json
+          if-no-files-found: ignore
